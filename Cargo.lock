@@ -2727,6 +2727,7 @@ dependencies = [
  "either",
  "expect-test",
  "itertools 0.14.0",
+ "la-arena 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "parser",
  "rayon",
  "rowan",

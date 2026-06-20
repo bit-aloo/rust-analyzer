@@ -7,6 +7,8 @@ use rustc_hash::FxHashMap;
 
 use crate::{SyntaxElement, SyntaxNode};
 
+use super::syntax_id::{SyntaxId, SyntaxIdMap};
+
 #[derive(Debug, Default)]
 pub struct SyntaxMapping {
     // important information to keep track of:
@@ -16,7 +18,8 @@ pub struct SyntaxMapping {
 
     // mappings ->  parents
     entry_parents: Vec<SyntaxNode>,
-    node_mappings: FxHashMap<SyntaxNode, MappingEntry>,
+    node_mappings: FxHashMap<SyntaxId, MappingEntry>,
+    id_map: SyntaxIdMap,
 }
 
 impl SyntaxMapping {
@@ -184,14 +187,19 @@ impl SyntaxMapping {
         let remap_base: u32 = self.entry_parents.len().try_into().unwrap();
 
         self.entry_parents.append(&mut other.entry_parents);
-        self.node_mappings.extend(other.node_mappings.into_iter().map(|(node, entry)| {
-            (node, MappingEntry { parent: entry.parent + remap_base, ..entry })
+
+        let id_remapping = self.id_map.merge(other.id_map);
+
+        self.node_mappings.extend(other.node_mappings.into_iter().map(|(old_id, entry)| {
+            let new_id = id_remapping.get(&old_id).copied().unwrap_or(old_id);
+            (new_id, MappingEntry { parent: entry.parent + remap_base, ..entry })
         }));
     }
 
     /// Follows the input one step along the syntax mapping tree
     fn upmap_node_single(&self, input: &SyntaxNode) -> Option<SyntaxNode> {
-        let MappingEntry { parent, child_slot } = self.node_mappings.get(input)?;
+        let input_id = self.id_map.get_id(input)?;
+        let MappingEntry { parent, child_slot } = self.node_mappings.get(&input_id)?;
 
         let output = self.entry_parents[*parent as usize]
             .children_with_tokens()
@@ -211,7 +219,10 @@ impl SyntaxMapping {
 
         let node_entries = node_mappings
             .into_iter()
-            .map(|(node, slot)| (node, MappingEntry { parent: parent_entry, child_slot: slot }));
+            .map(|(node, slot)| {
+                let id = self.id_map.alloc(&node);
+                (id, MappingEntry { parent: parent_entry, child_slot: slot })
+            });
 
         self.node_mappings.extend(node_entries);
     }
